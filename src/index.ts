@@ -33,7 +33,7 @@ commands.set(endVotingCommand.data.name, endVotingCommand);
 
 // ─── Events ───────────────────────────────────────────────────────────────────
 
-client.once('ready', () => handleReady(client));
+client.once('clientReady', () => handleReady(client));
 
 client.on('messageReactionAdd', handleMessageReactionAdd);
 
