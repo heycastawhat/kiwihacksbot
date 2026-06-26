@@ -17,14 +17,16 @@ export async function handleMessageReactionAdd(
   reaction: MessageReaction | PartialMessageReaction,
   user: User | PartialUser,
 ): Promise<void> {
+  console.log(`[reaction] emoji=${reaction.emoji.name} user=${user.id} channel=${reaction.message.channelId} partial=${reaction.partial}`);
+
   // Resolve partials (reactions/messages on older messages may be partial)
   if (reaction.partial) {
     try { await reaction.fetch(); }
-    catch { return; }
+    catch (e) { console.log('[reaction] fetch failed:', e); return; }
   }
   if (user.partial) {
     try { await user.fetch(); }
-    catch { return; }
+    catch (e) { console.log('[reaction] user fetch failed:', e); return; }
   }
 
   // Ignore bots
