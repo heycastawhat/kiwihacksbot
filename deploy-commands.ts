@@ -22,13 +22,11 @@ const rest = new REST({ version: '10' }).setToken(config.token);
   try {
     console.log('Registering slash commands…');
 
-    for (const guildId of [config.submissionGuildId, config.opsGuildId]) {
-      await rest.put(
-        Routes.applicationGuildCommands(config.clientId, guildId),
-        { body: commandBodies },
-      );
-      console.log(`  ✅ Registered to guild ${guildId}`);
-    }
+    await rest.put(
+      Routes.applicationGuildCommands(config.clientId, config.opsGuildId),
+      { body: commandBodies },
+    );
+    console.log(`  ✅ Registered to ops guild ${config.opsGuildId}`);
 
     console.log('Done!');
   } catch (err) {

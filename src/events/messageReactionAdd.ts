@@ -35,9 +35,8 @@ export async function handleMessageReactionAdd(
 
   const message = reaction.message;
 
-  // Must be in the designated submission channel
-  if (message.channelId !== config.submissionChannelId) return;
-  if (message.guildId !== config.submissionGuildId) return;
+  // Must be in one of the valid submission channels
+  if (!config.validSubmissionChannels.includes(message.channelId)) return;
 
   // Fetch the full message if partial so we can read the author
   const fullMessage = message.partial ? await message.fetch() : message;

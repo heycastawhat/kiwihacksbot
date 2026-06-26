@@ -27,6 +27,15 @@ export const endVotingCommand = {
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
+    // Ops guild only
+    if (interaction.guildId !== config.opsGuildId) {
+      await interaction.reply({
+        content: '❌ This command can only be used in the ops server.',
+        ephemeral: true,
+      });
+      return;
+    }
+
     if (!interaction.memberPermissions?.has('Administrator')) {
       await interaction.reply({
         content: '❌ Administrator permission required.',

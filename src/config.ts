@@ -17,4 +17,10 @@ export const config = {
 
   // The emoji users react with to trigger submission
   submissionEmoji: '⭐',
+
+  // All channels where a ⭐ reaction triggers the submission flow
+  // (ops channel included for testing)
+  get validSubmissionChannels() {
+    return [this.submissionChannelId, this.opsChannelId];
+  },
 };
