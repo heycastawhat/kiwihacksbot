@@ -43,6 +43,13 @@ client.on('interactionCreate', (interaction) =>
   handleInteractionCreate(interaction, commands),
 );
 
+// Raw gateway debug — remove once reactions are confirmed working
+client.on('raw', (packet: any) => {
+  if (packet.t === 'MESSAGE_REACTION_ADD') {
+    console.log('[RAW REACTION]', JSON.stringify(packet.d));
+  }
+});
+
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 
 client.login(config.token);
