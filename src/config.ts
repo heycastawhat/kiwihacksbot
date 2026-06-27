@@ -12,7 +12,7 @@ export const config = {
 
   // Submission server
   submissionGuildId: '1364843430622134282',
-  submissionChannelId: '1500026751219404921',
+  submissionChannelId: '1520268209977036920',
 
   // Ops server (results go here)
   opsGuildId: '1512948988817444874',
