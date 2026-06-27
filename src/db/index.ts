@@ -1,67 +1,19 @@
-import { DatabaseSync } from 'node:sqlite';
-import path from 'path';
+import Airtable from 'airtable';
+import { config } from '../config';
 
-const db = new DatabaseSync(path.join(process.cwd(), 'data.db'));
-
-// Performance & integrity settings
-db.exec("PRAGMA journal_mode = WAL");
-db.exec("PRAGMA foreign_keys = ON");
-
-// ─── Schema ───────────────────────────────────────────────────────────────────
-
-db.exec(`
-  CREATE TABLE IF NOT EXISTS submissions (
-    id           INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id      TEXT    NOT NULL,
-    username     TEXT    NOT NULL,
-    message_id   TEXT    NOT NULL,
-    channel_id   TEXT    NOT NULL,
-    project_name TEXT,
-    description  TEXT,
-    month        INTEGER NOT NULL,
-    year         INTEGER NOT NULL,
-    submitted_at TEXT    NOT NULL DEFAULT (datetime('now')),
-    status       TEXT    NOT NULL DEFAULT 'pending'
-  );
-
-  CREATE TABLE IF NOT EXISTS votes (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    voter_id      TEXT    NOT NULL,
-    submission_id INTEGER NOT NULL,
-    voted_at      TEXT    NOT NULL DEFAULT (datetime('now')),
-    UNIQUE(voter_id, submission_id),
-    FOREIGN KEY (submission_id) REFERENCES submissions(id) ON DELETE CASCADE
-  );
-
-  CREATE TABLE IF NOT EXISTS voting_sessions (
-    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    month      INTEGER NOT NULL,
-    year       INTEGER NOT NULL,
-    status     TEXT    NOT NULL DEFAULT 'active',
-    started_at TEXT    NOT NULL DEFAULT (datetime('now')),
-    ended_at   TEXT
-  );
-
-  CREATE TABLE IF NOT EXISTS voting_messages (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    submission_id INTEGER NOT NULL,
-    message_id    TEXT    NOT NULL,
-    session_id    INTEGER NOT NULL,
-    FOREIGN KEY (submission_id) REFERENCES submissions(id) ON DELETE CASCADE,
-    FOREIGN KEY (session_id)    REFERENCES voting_sessions(id) ON DELETE CASCADE
-  );
-`);
+const base = new Airtable({ apiKey: config.airtableApiKey }).base(config.airtableBaseId);
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface Submission {
-  id: number;
+  id: string; // Airtable record ID
   user_id: string;
   username: string;
   message_id: string;
   channel_id: string;
   project_name: string | null;
   description: string | null;
+  address: string | null;
   month: number;
   year: number;
   submitted_at: string;
@@ -69,7 +21,7 @@ export interface Submission {
 }
 
 export interface VotingSession {
-  id: number;
+  id: string;
   month: number;
   year: number;
   status: string;
@@ -78,162 +30,263 @@ export interface VotingSession {
 }
 
 export interface VotingMessage {
-  id: number;
-  submission_id: number;
+  id: string;
+  submission_id: string;
   message_id: string;
-  session_id: number;
+  session_id: string;
 }
 
 // ─── Submissions ──────────────────────────────────────────────────────────────
 
-export function getSubmissionByUserAndMonth(
+export async function getSubmissionByUserAndMonth(
   userId: string,
   month: number,
   year: number,
-): Submission | undefined {
-  return db
-    .prepare(
-      `SELECT * FROM submissions
-       WHERE user_id = ? AND month = ? AND year = ? AND status = 'active'`,
-    )
-    .get(userId, month, year) as Submission | undefined;
+): Promise<Submission | undefined> {
+  const records = await base('submissions').select({
+    filterByFormula: `AND({user_id} = '${userId}', {month} = ${month}, {year} = ${year}, {status} = 'active')`,
+    maxRecords: 1
+  }).firstPage();
+
+  if (records.length === 0) return undefined;
+  const r = records[0];
+  return {
+    id: r.id,
+    user_id: r.get('user_id') as string,
+    username: r.get('username') as string,
+    message_id: r.get('message_id') as string,
+    channel_id: r.get('channel_id') as string,
+    project_name: r.get('project_name') as string,
+    description: r.get('description') as string,
+    address: (r.get('address') as string) || null,
+    month: r.get('month') as number,
+    year: r.get('year') as number,
+    submitted_at: r.get('submitted_at') as string,
+    status: r.get('status') as string,
+  };
 }
 
-export function getPendingSubmission(userId: string): Submission | undefined {
-  return db
-    .prepare(`SELECT * FROM submissions WHERE user_id = ? AND status = 'pending'`)
-    .get(userId) as Submission | undefined;
+export async function getPendingSubmission(userId: string): Promise<Submission | undefined> {
+  const records = await base('submissions').select({
+    filterByFormula: `AND({user_id} = '${userId}', {status} = 'pending')`,
+    maxRecords: 1
+  }).firstPage();
+
+  if (records.length === 0) return undefined;
+  const r = records[0];
+  return {
+    id: r.id,
+    user_id: r.get('user_id') as string,
+  } as Submission;
 }
 
-export function createSubmission(
+export async function createSubmission(
   userId: string,
   username: string,
   messageId: string,
   channelId: string,
   month: number,
   year: number,
-): number {
-  const result = db
-    .prepare(
-      `INSERT INTO submissions (user_id, username, message_id, channel_id, month, year, status)
-       VALUES (?, ?, ?, ?, ?, ?, 'pending')`,
-    )
-    .run(userId, username, messageId, channelId, month, year);
-  return Number(result.lastInsertRowid);
+): Promise<string> {
+  const records = await base('submissions').create([
+    {
+      fields: {
+        user_id: userId,
+        username,
+        message_id: messageId,
+        channel_id: channelId,
+        month,
+        year,
+        status: 'pending',
+        submitted_at: new Date().toISOString(),
+      }
+    }
+  ]);
+  return records[0].id;
 }
 
-export function completeSubmission(
-  id: number,
+export async function completeSubmission(
+  id: string,
   projectName: string,
   description: string,
-): void {
-  db.prepare(
-    `UPDATE submissions SET project_name = ?, description = ?, status = 'active' WHERE id = ?`,
-  ).run(projectName, description, id);
+  address: string,
+): Promise<void> {
+  await base('submissions').update([
+    {
+      id,
+      fields: {
+        project_name: projectName,
+        description: description,
+        address: address,
+        status: 'active'
+      }
+    }
+  ]);
 }
 
-export function cancelPendingSubmission(id: number): void {
-  db.prepare(`DELETE FROM submissions WHERE id = ? AND status = 'pending'`).run(id);
+export async function cancelPendingSubmission(id: string): Promise<void> {
+  await base('submissions').destroy([id]);
 }
 
-export function getActiveSubmissions(month: number, year: number): Submission[] {
-  return db
-    .prepare(
-      `SELECT * FROM submissions WHERE month = ? AND year = ? AND status = 'active' ORDER BY id ASC`,
-    )
-    .all(month, year) as unknown as Submission[];
+export async function getActiveSubmissions(month: number, year: number): Promise<Submission[]> {
+  const records = await base('submissions').select({
+    filterByFormula: `AND({month} = ${month}, {year} = ${year}, {status} = 'active')`
+  }).all();
+
+  return records.map(r => ({
+    id: r.id,
+    user_id: r.get('user_id') as string,
+    username: r.get('username') as string,
+    message_id: r.get('message_id') as string,
+    channel_id: r.get('channel_id') as string,
+    project_name: r.get('project_name') as string,
+    description: r.get('description') as string,
+    address: (r.get('address') as string) || null,
+    month: r.get('month') as number,
+    year: r.get('year') as number,
+    submitted_at: r.get('submitted_at') as string,
+    status: r.get('status') as string,
+  }));
 }
 
-export function getTopSubmissions(
+export async function getTopSubmissions(
   month: number,
   year: number,
   limit = 10,
-): (Submission & { vote_count: number })[] {
-  return db
-    .prepare(
-      `SELECT s.*, COUNT(v.id) AS vote_count
-       FROM submissions s
-       LEFT JOIN votes v ON s.id = v.submission_id
-       WHERE s.month = ? AND s.year = ? AND s.status = 'active'
-       GROUP BY s.id
-       ORDER BY vote_count DESC, s.id ASC
-       LIMIT ?`,
-    )
-    .all(month, year, limit) as unknown as (Submission & { vote_count: number })[];
+): Promise<(Submission & { vote_count: number })[]> {
+  const submissions = await getActiveSubmissions(month, year);
+  const result = [];
+  
+  for (const sub of submissions) {
+    const vote_count = await getVoteCount(sub.id);
+    result.push({ ...sub, vote_count });
+  }
+
+  return result.sort((a, b) => b.vote_count - a.vote_count).slice(0, limit);
 }
 
 // ─── Votes ────────────────────────────────────────────────────────────────────
 
-export function getVoteCount(submissionId: number): number {
-  const row = db
-    .prepare(`SELECT COUNT(*) AS count FROM votes WHERE submission_id = ?`)
-    .get(submissionId) as { count: number };
-  return Number(row.count);
+export async function getVoteCount(submissionId: string): Promise<number> {
+  const records = await base('votes').select({
+    filterByFormula: `{submission_id} = '${submissionId}'`
+  }).all();
+  return records.length;
 }
 
-export function hasVoted(voterId: string, submissionId: number): boolean {
-  const row = db
-    .prepare(`SELECT COUNT(*) AS count FROM votes WHERE voter_id = ? AND submission_id = ?`)
-    .get(voterId, submissionId) as { count: number };
-  return Number(row.count) > 0;
+export async function hasVoted(voterId: string, submissionId: string): Promise<boolean> {
+  const records = await base('votes').select({
+    filterByFormula: `AND({voter_id} = '${voterId}', {submission_id} = '${submissionId}')`,
+    maxRecords: 1
+  }).firstPage();
+  return records.length > 0;
 }
 
-export function addVote(voterId: string, submissionId: number): void {
-  db.prepare(`INSERT OR IGNORE INTO votes (voter_id, submission_id) VALUES (?, ?)`).run(
-    voterId,
-    submissionId,
-  );
+export async function addVote(voterId: string, submissionId: string): Promise<void> {
+  const voted = await hasVoted(voterId, submissionId);
+  if (!voted) {
+    await base('votes').create([
+      {
+        fields: {
+          voter_id: voterId,
+          submission_id: submissionId,
+          voted_at: new Date().toISOString()
+        }
+      }
+    ]);
+  }
 }
 
-export function removeVote(voterId: string, submissionId: number): void {
-  db.prepare(`DELETE FROM votes WHERE voter_id = ? AND submission_id = ?`).run(
-    voterId,
-    submissionId,
-  );
+export async function removeVote(voterId: string, submissionId: string): Promise<void> {
+  const records = await base('votes').select({
+    filterByFormula: `AND({voter_id} = '${voterId}', {submission_id} = '${submissionId}')`,
+    maxRecords: 1
+  }).firstPage();
+  
+  if (records.length > 0) {
+    await base('votes').destroy([records[0].id]);
+  }
 }
 
 // ─── Voting Sessions ──────────────────────────────────────────────────────────
 
-export function getActiveVotingSession(): VotingSession | undefined {
-  return db
-    .prepare(`SELECT * FROM voting_sessions WHERE status = 'active' LIMIT 1`)
-    .get() as VotingSession | undefined;
+export async function getActiveVotingSession(): Promise<VotingSession | undefined> {
+  const records = await base('voting_sessions').select({
+    filterByFormula: `{status} = 'active'`,
+    maxRecords: 1
+  }).firstPage();
+
+  if (records.length === 0) return undefined;
+  const r = records[0];
+  return {
+    id: r.id,
+    month: r.get('month') as number,
+    year: r.get('year') as number,
+    status: r.get('status') as string,
+    started_at: r.get('started_at') as string,
+    ended_at: r.get('ended_at') as string | null,
+  };
 }
 
-export function createVotingSession(month: number, year: number): number {
-  const result = db
-    .prepare(`INSERT INTO voting_sessions (month, year) VALUES (?, ?)`)
-    .run(month, year);
-  return Number(result.lastInsertRowid);
+export async function createVotingSession(month: number, year: number): Promise<string> {
+  const records = await base('voting_sessions').create([
+    {
+      fields: {
+        month,
+        year,
+        status: 'active',
+        started_at: new Date().toISOString()
+      }
+    }
+  ]);
+  return records[0].id;
 }
 
-export function closeVotingSession(sessionId: number): void {
-  db.prepare(
-    `UPDATE voting_sessions SET status = 'closed', ended_at = datetime('now') WHERE id = ?`,
-  ).run(sessionId);
+export async function closeVotingSession(sessionId: string): Promise<void> {
+  await base('voting_sessions').update([
+    {
+      id: sessionId,
+      fields: {
+        status: 'closed',
+        ended_at: new Date().toISOString()
+      }
+    }
+  ]);
 }
 
 // ─── Voting Messages ──────────────────────────────────────────────────────────
 
-export function createVotingMessage(
-  submissionId: number,
+export async function createVotingMessage(
+  submissionId: string,
   messageId: string,
-  sessionId: number,
-): void {
-  db.prepare(
-    `INSERT INTO voting_messages (submission_id, message_id, session_id) VALUES (?, ?, ?)`,
-  ).run(submissionId, messageId, sessionId);
+  sessionId: string,
+): Promise<void> {
+  await base('voting_messages').create([
+    {
+      fields: {
+        submission_id: submissionId,
+        message_id: messageId,
+        session_id: sessionId
+      }
+    }
+  ]);
 }
 
-export function getVotingMessageBySubmission(
-  submissionId: number,
-  sessionId: number,
-): VotingMessage | undefined {
-  return db
-    .prepare(
-      `SELECT * FROM voting_messages WHERE submission_id = ? AND session_id = ?`,
-    )
-    .get(submissionId, sessionId) as VotingMessage | undefined;
-}
+export async function getVotingMessageBySubmission(
+  submissionId: string,
+  sessionId: string,
+): Promise<VotingMessage | undefined> {
+  const records = await base('voting_messages').select({
+    filterByFormula: `AND({submission_id} = '${submissionId}', {session_id} = '${sessionId}')`,
+    maxRecords: 1
+  }).firstPage();
 
-export default db;
+  if (records.length === 0) return undefined;
+  const r = records[0];
+  return {
+    id: r.id,
+    submission_id: r.get('submission_id') as string,
+    message_id: r.get('message_id') as string,
+    session_id: r.get('session_id') as string,
+  };
+}

@@ -54,7 +54,7 @@ export async function handleMessageReactionAdd(
   const year = now.getFullYear();
 
   // ── 1-per-month guard ─────────────────────────────────────────────────────
-  const existing = getSubmissionByUserAndMonth(user.id, month, year);
+  const existing = await getSubmissionByUserAndMonth(user.id, month, year);
   if (existing) {
     try {
       const dm = await user.createDM();
@@ -62,9 +62,9 @@ export async function handleMessageReactionAdd(
         embeds: [
           {
             color: 0xed4245,
-            title: '❌ Already submitted this month',
+            title: 'Error: Already submitted this month',
             description:
-              "You can only submit **one project per month**. Your existing submission is locked in — good luck with voting! 🤞",
+              "You can only submit **one project per month**. Your existing submission is locked in - good luck with voting!",
           },
         ],
       });
@@ -73,11 +73,11 @@ export async function handleMessageReactionAdd(
   }
 
   // Don't create a second pending row if one already exists (edge case)
-  const alreadyPending = getPendingSubmission(user.id);
+  const alreadyPending = await getPendingSubmission(user.id);
   if (alreadyPending) return;
 
   // ── Create pending submission & start DM flow ─────────────────────────────
-  const submissionId = createSubmission(
+  const submissionId = await createSubmission(
     user.id,
     (user as User).username,
     fullMessage.id,
@@ -92,10 +92,10 @@ export async function handleMessageReactionAdd(
       embeds: [
         {
           color: 0x5865f2,
-          title: '🚀 Project Submission',
+          title: 'Project Submission',
           description:
             "Let's get your project listed on the board!\n\n**What's your project called?**",
-          footer: { text: "Type your project name — you've got 5 minutes ⏳" },
+          footer: { text: "Type your project name - you've got 5 minutes" },
         },
       ],
     });
@@ -105,7 +105,7 @@ export async function handleMessageReactionAdd(
   } catch {
     // User has DMs closed — cancel the pending record
     const { cancelPendingSubmission } = await import('../db');
-    cancelPendingSubmission(submissionId);
+    await cancelPendingSubmission(submissionId);
 
     try {
       const channel = fullMessage.channel as TextChannel;

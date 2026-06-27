@@ -7,6 +7,9 @@ export const config = {
   token: process.env.DISCORD_TOKEN,
   clientId: process.env.CLIENT_ID,
 
+  airtableApiKey: process.env.AIRTABLE_API_KEY as string,
+  airtableBaseId: process.env.AIRTABLE_BASE_ID as string,
+
   // Submission server
   submissionGuildId: '1364843430622134282',
   submissionChannelId: '1500026751219404921',

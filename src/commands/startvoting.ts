@@ -24,30 +24,29 @@ export const startVotingCommand = {
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
+    await interaction.deferReply({ ephemeral: true });
+
     // Ops guild only
     if (interaction.guildId !== config.opsGuildId) {
-      await interaction.reply({
-        content: '❌ This command can only be used in the ops server.',
-        ephemeral: true,
+      await interaction.editReply({
+        content: 'Error: This command can only be used in the ops server.',
       });
       return;
     }
 
     if (!interaction.memberPermissions?.has('Administrator')) {
-      await interaction.reply({
-        content: '❌ Administrator permission required.',
-        ephemeral: true,
+      await interaction.editReply({
+        content: 'Error: Administrator permission required.',
       });
       return;
     }
 
     // Guard: only one active session at a time
-    const existingSession = getActiveVotingSession();
+    const existingSession = await getActiveVotingSession();
     if (existingSession) {
-      await interaction.reply({
+      await interaction.editReply({
         content:
-          '❌ There is already an active voting session. Run `/endvoting` first.',
-        ephemeral: true,
+          'Error: There is already an active voting session. Run `/endvoting` first.',
       });
       return;
     }
@@ -56,25 +55,27 @@ export const startVotingCommand = {
     const month = now.getMonth() + 1;
     const year = now.getFullYear();
 
-    const submissions = getActiveSubmissions(month, year);
+    const submissions = await getActiveSubmissions(month, year);
     if (submissions.length === 0) {
-      await interaction.reply({
-        content: '❌ No active submissions found for this month.',
-        ephemeral: true,
+      await interaction.editReply({
+        content: 'Error: No active submissions found for this month.',
       });
       return;
     }
 
-    await interaction.deferReply({ ephemeral: true });
+    const sessionId = await createVotingSession(month, year);
 
-    const sessionId = createVotingSession(month, year);
-
-    const channel = interaction.client.channels.cache.get(
-      config.submissionChannelId,
-    ) as TextChannel | undefined;
-
+    let channel: TextChannel;
+    try {
+      channel = (await interaction.client.channels.fetch(
+        config.submissionChannelId,
+      )) as TextChannel;
+    } catch {
+      channel = interaction.channel as TextChannel;
+    }
+    
     if (!channel) {
-      await interaction.editReply('❌ Could not find the submission channel.');
+      await interaction.editReply('Error: Could not find the submission channel.');
       return;
     }
 
@@ -88,11 +89,11 @@ export const startVotingCommand = {
       embeds: [
         new EmbedBuilder()
           .setColor(0x5865f2)
-          .setTitle(`🗳️ ${MONTH_NAMES[month - 1]} ${year} — Voting is Open!`)
+          .setTitle(`${MONTH_NAMES[month - 1]} ${year} - Voting is Open!`)
           .setDescription(
             `Time to vote for your favourite projects this month!\n\n` +
-            `Hit the **⭐ Vote** button on any project to cast your vote. ` +
-            `You can vote for as many projects as you like — **one vote per project**.\n\n` +
+            `Hit the **Vote** button on any project to cast your vote. ` +
+            `You can vote for as many projects as you like - **one vote per project**.\n\n` +
             `**${submissions.length} project${submissions.length !== 1 ? 's' : ''}** up for voting:`,
           )
           .setTimestamp(),
@@ -101,28 +102,25 @@ export const startVotingCommand = {
 
     // ── One embed + button per project ────────────────────────────────────────
     for (const sub of submissions) {
-      const voteCount = getVoteCount(sub.id);
-
       const embed = new EmbedBuilder()
         .setColor(0x5865f2)
-        .setAuthor({ name: `Submitted by @${sub.username}` })
-        .setTitle(sub.project_name!)
-        .setDescription(sub.description!)
-        .setFooter({ text: `Project #${sub.id}` });
+        .setTitle(sub.project_name || 'Untitled')
+        .setDescription(sub.description || 'No description provided.')
+        .setAuthor({ name: sub.username });
 
       const button = new ButtonBuilder()
         .setCustomId(`vote_${sub.id}`)
-        .setLabel(`⭐ Vote (${voteCount})`)
+        .setLabel('Vote')
         .setStyle(ButtonStyle.Primary);
 
       const row = new ActionRowBuilder<ButtonBuilder>().addComponents(button);
 
       const msg = await channel.send({ embeds: [embed], components: [row] });
-      createVotingMessage(sub.id, msg.id, sessionId);
+      await createVotingMessage(sub.id, msg.id, sessionId);
     }
 
     await interaction.editReply(
-      `✅ Voting started! ${submissions.length} project${submissions.length !== 1 ? 's' : ''} posted to <#${config.submissionChannelId}>.`,
+      `Success: Voting started! ${submissions.length} project${submissions.length !== 1 ? 's' : ''} posted to <#${channel.id}>.`,
     );
   },
 };

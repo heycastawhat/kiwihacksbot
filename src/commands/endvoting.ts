@@ -2,6 +2,9 @@ import {
   ChatInputCommandInteraction,
   SlashCommandBuilder,
   EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
   TextChannel,
   PermissionFlagsBits,
 } from 'discord.js';
@@ -17,7 +20,7 @@ const MONTH_NAMES = [
   'July','August','September','October','November','December',
 ];
 
-const MEDALS = ['🥇','🥈','🥉','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟'];
+const MEDALS = ['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th'];
 const PLACE_COLORS = [0xffd700, 0xc0c0c0, 0xcd7f32]; // gold, silver, bronze
 
 export const endVotingCommand = {
@@ -27,42 +30,39 @@ export const endVotingCommand = {
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
+    await interaction.deferReply({ ephemeral: true });
+
     // Ops guild only
     if (interaction.guildId !== config.opsGuildId) {
-      await interaction.reply({
-        content: '❌ This command can only be used in the ops server.',
-        ephemeral: true,
+      await interaction.editReply({
+        content: 'Error: This command can only be used in the ops server.',
       });
       return;
     }
 
     if (!interaction.memberPermissions?.has('Administrator')) {
-      await interaction.reply({
-        content: '❌ Administrator permission required.',
-        ephemeral: true,
+      await interaction.editReply({
+        content: 'Error: Administrator permission required.',
       });
       return;
     }
 
-    const session = getActiveVotingSession();
+    const session = await getActiveVotingSession();
     if (!session) {
-      await interaction.reply({
-        content: '❌ No active voting session found. Run `/startvoting` first.',
-        ephemeral: true,
+      await interaction.editReply({
+        content: 'Error: No active voting session found. Run `/startvoting` first.',
       });
       return;
     }
 
-    await interaction.deferReply({ ephemeral: true });
-
-    const top = getTopSubmissions(session.month, session.year, 10);
+    const top = await getTopSubmissions(session.month, session.year, 10);
     if (top.length === 0) {
-      await interaction.editReply('❌ No submissions found for this session.');
+      await interaction.editReply('Error: No submissions found for this session.');
       return;
     }
 
     // Close the session before posting so late votes don't slip through
-    closeVotingSession(session.id);
+    await closeVotingSession(session.id);
 
     // ── Fetch the ops channel ─────────────────────────────────────────────────
     let opsChannel: TextChannel;
@@ -70,7 +70,7 @@ export const endVotingCommand = {
       const opsGuild = await interaction.client.guilds.fetch(config.opsGuildId);
       opsChannel = (await opsGuild.channels.fetch(config.opsChannelId)) as TextChannel;
     } catch {
-      await interaction.editReply('❌ Could not reach the ops server / channel.');
+      await interaction.editReply('Error: Could not reach the ops server / channel.');
       return;
     }
 
@@ -83,7 +83,7 @@ export const endVotingCommand = {
       embeds: [
         new EmbedBuilder()
           .setColor(0xfee75c)
-          .setTitle(`🏆 ${monthName} ${year} — Top ${count} Projects`)
+          .setTitle(`${monthName} ${year} - Top ${count} Projects`)
           .setDescription(
             `Voting has closed! Here are the top **${count}** projects for ${monthName} ${year}.\n` +
             `Total votes cast across all projects: **${top.reduce((a, s) => a + s.vote_count, 0)}**`,
@@ -103,9 +103,10 @@ export const endVotingCommand = {
         .setTitle(`${medal} ${sub.project_name}`)
         .setDescription(sub.description!)
         .addFields(
-          { name: '👤 Submitted by', value: `@${sub.username}`, inline: true },
-          { name: '🆔 Discord ID',   value: sub.user_id,          inline: true },
-          { name: '⭐ Votes',         value: String(sub.vote_count), inline: true },
+          { name: 'Submitted by', value: `<@${sub.user_id}>`, inline: true },
+          { name: 'Discord ID',   value: sub.user_id,          inline: true },
+          { name: 'Votes',        value: String(sub.vote_count), inline: true },
+          { name: 'Address',      value: sub.address || 'No address provided', inline: false }
         )
         .setFooter({ text: `Submission ID: ${sub.id}` });
 
@@ -113,7 +114,7 @@ export const endVotingCommand = {
     }
 
     await interaction.editReply(
-      `✅ Voting closed. Top ${count} results posted to the ops server.`,
+      `Success: Voting closed. Top ${count} results posted to the ops server.`,
     );
   },
 };
