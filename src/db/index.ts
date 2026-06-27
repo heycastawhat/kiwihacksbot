@@ -82,6 +82,31 @@ export async function getPendingSubmission(userId: string): Promise<Submission |
   } as Submission;
 }
 
+export async function getSubmissionByMessageId(messageId: string): Promise<Submission | undefined> {
+  const records = await base('submissions').select({
+    filterByFormula: `{message_id} = '${messageId}'`,
+    maxRecords: 1
+  }).firstPage();
+
+  if (records.length === 0) return undefined;
+  const r = records[0];
+  return {
+    id: r.id,
+    user_id: r.get('user_id') as string,
+    username: r.get('username') as string,
+    message_id: r.get('message_id') as string,
+    channel_id: r.get('channel_id') as string,
+    project_name: r.get('project_name') as string,
+    description: r.get('description') as string,
+    github_link: (r.get('github_link') as string) || null,
+    address: (r.get('address') as string) || null,
+    month: r.get('month') as number,
+    year: r.get('year') as number,
+    submitted_at: r.get('submitted_at') as string,
+    status: r.get('status') as string,
+  };
+}
+
 export async function createSubmission(
   userId: string,
   username: string,
@@ -130,6 +155,23 @@ export async function completeSubmission(
 
 export async function cancelPendingSubmission(id: string): Promise<void> {
   await base('submissions').destroy([id]);
+}
+
+export async function closeAllActiveSubmissions(month: number, year: number): Promise<void> {
+  const records = await base('submissions').select({
+    filterByFormula: `AND({month} = ${month}, {year} = ${year}, {status} = 'active')`
+  }).all();
+
+  for (const r of records) {
+    await base('submissions').update([
+      {
+        id: r.id,
+        fields: {
+          status: 'completed'
+        }
+      }
+    ]);
+  }
 }
 
 export async function getActiveSubmissions(month: number, year: number): Promise<Submission[]> {

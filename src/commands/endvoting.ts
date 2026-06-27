@@ -10,9 +10,8 @@ import {
 } from 'discord.js';
 import { config } from '../config';
 import {
-  getActiveVotingSession,
-  closeVotingSession,
   getTopSubmissions,
+  closeAllActiveSubmissions,
 } from '../db';
 
 const MONTH_NAMES = [
@@ -47,22 +46,15 @@ export const endVotingCommand = {
       return;
     }
 
-    const session = await getActiveVotingSession();
-    if (!session) {
-      await interaction.editReply({
-        content: 'Error: No active voting session found. Run `/startvoting` first.',
-      });
-      return;
-    }
+    const now = new Date();
+    const month = now.getMonth() + 1;
+    const year = now.getFullYear();
 
-    const top = await getTopSubmissions(session.month, session.year, 10);
+    const top = await getTopSubmissions(month, year, 10);
     if (top.length === 0) {
       await interaction.editReply('Error: No submissions found for this session.');
       return;
     }
-
-    // Close the session before posting so late votes don't slip through
-    await closeVotingSession(session.id);
 
     // ── Fetch the ops channel ─────────────────────────────────────────────────
     let opsChannel: TextChannel;
@@ -74,8 +66,7 @@ export const endVotingCommand = {
       return;
     }
 
-    const monthName = MONTH_NAMES[session.month - 1];
-    const year = session.year;
+    const monthName = MONTH_NAMES[month - 1];
     const count = Math.min(top.length, 10);
 
     // ── Header ────────────────────────────────────────────────────────────────
@@ -128,6 +119,8 @@ export const endVotingCommand = {
 
       await opsChannel.send({ embeds: [embed] });
     }
+
+    await closeAllActiveSubmissions(month, year);
 
     await interaction.editReply(
       `Success: Voting closed. Top ${count} results posted to the ops server.`,

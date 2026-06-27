@@ -4,7 +4,6 @@ import { handleReady } from './events/ready';
 import { handleMessageReactionAdd } from './events/messageReactionAdd';
 import { handleMessageCreate } from './events/messageCreate';
 import { handleInteractionCreate } from './events/interactionCreate';
-import { startVotingCommand } from './commands/startvoting';
 import { endVotingCommand } from './commands/endvoting';
 
 // ─── Client ───────────────────────────────────────────────────────────────────
@@ -29,7 +28,6 @@ const client = new Client({
 // ─── Commands ─────────────────────────────────────────────────────────────────
 
 const commands = new Collection<string, any>();
-commands.set(startVotingCommand.data.name, startVotingCommand);
 commands.set(endVotingCommand.data.name, endVotingCommand);
 
 // ─── Events ───────────────────────────────────────────────────────────────────

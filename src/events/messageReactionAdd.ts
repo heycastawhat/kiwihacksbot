@@ -10,6 +10,9 @@ import {
   getSubmissionByUserAndMonth,
   getPendingSubmission,
   createSubmission,
+  getSubmissionByMessageId,
+  hasVoted,
+  addVote,
 } from '../db';
 import { pendingDMFlows, startDMFlowTimeout } from './messageCreate';
 
@@ -32,10 +35,44 @@ export async function handleMessageReactionAdd(
   // Ignore bots
   if (user.bot) return;
 
-  // Only the ⭐ emoji matters
-  if (reaction.emoji.name !== config.submissionEmoji) return;
-
+  // ── Anytime Voting Logic ──────────────────────────────────────────────────
   const message = reaction.message;
+
+  if (reaction.emoji.name === 'upvote') {
+    const sub = await getSubmissionByMessageId(message.id);
+    if (!sub || sub.status !== 'active') return;
+
+    // Blind voting: immediately remove the reaction
+    try {
+      await reaction.users.remove(user.id);
+    } catch (e) {
+      console.log('[reaction] failed to remove upvote reaction:', e);
+    }
+
+    if (sub.user_id === user.id) {
+      try {
+        const dm = await user.createDM();
+        await dm.send('You cannot vote for your own project!');
+      } catch (e) {}
+      return;
+    }
+
+    const voted = await hasVoted(user.id, sub.id);
+    try {
+      const dm = await user.createDM();
+      if (voted) {
+        await dm.send(`You've already voted for **${sub.project_name || 'Untitled'}**!`);
+      } else {
+        await addVote(user.id, sub.id);
+        await dm.send(`Your vote for **${sub.project_name || 'Untitled'}** has been secretly recorded!`);
+      }
+    } catch (e) {}
+
+    return;
+  }
+
+  // Only the ⭐ emoji matters for submissions
+  if (reaction.emoji.name !== config.submissionEmoji) return;
 
   // Must be in one of the valid submission channels
   if (!config.validSubmissionChannels.includes(message.channelId)) return;
