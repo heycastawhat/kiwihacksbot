@@ -98,11 +98,26 @@ export const endVotingCommand = {
       const medal = MEDALS[i] ?? `${i + 1}.`;
       const color = PLACE_COLORS[i] ?? 0x5865f2;
 
+      let imageUrl = null;
+      try {
+        const submitChannel = await interaction.client.channels.fetch(sub.channel_id) as any;
+        const originalMsg = await submitChannel.messages.fetch(sub.message_id);
+        const attachment = originalMsg.attachments.first();
+        if (attachment && attachment.contentType?.startsWith('image/')) {
+          imageUrl = attachment.url;
+        }
+      } catch (e) {
+        // Message deleted or inaccessible
+      }
+
       const embed = new EmbedBuilder()
         .setColor(color)
         .setTitle(`${medal} ${sub.project_name}`)
-        .setDescription(sub.description!)
-        .addFields(
+        .setDescription(sub.description!);
+      
+      if (imageUrl) embed.setImage(imageUrl);
+      
+      embed.addFields(
           { name: 'Submitted by', value: `<@${sub.user_id}>`, inline: true },
           { name: 'Discord ID',   value: sub.user_id,          inline: true },
           { name: 'Votes',        value: String(sub.vote_count), inline: true },

@@ -102,11 +102,25 @@ export const startVotingCommand = {
 
     // ── One embed + button per project ────────────────────────────────────────
     for (const sub of submissions) {
+      let imageUrl = null;
+      try {
+        const submitChannel = await interaction.client.channels.fetch(sub.channel_id) as any;
+        const originalMsg = await submitChannel.messages.fetch(sub.message_id);
+        const attachment = originalMsg.attachments.first();
+        if (attachment && attachment.contentType?.startsWith('image/')) {
+          imageUrl = attachment.url;
+        }
+      } catch (e) {
+        // Message deleted or inaccessible
+      }
+
       const embed = new EmbedBuilder()
         .setColor(0x5865f2)
         .setTitle(sub.project_name || 'Untitled')
         .setDescription(`${sub.description || 'No description provided.'}\n\n**GitHub:** ${sub.github_link || 'Not provided'}`)
         .setAuthor({ name: sub.username });
+
+      if (imageUrl) embed.setImage(imageUrl);
 
       const button = new ButtonBuilder()
         .setCustomId(`vote_${sub.id}`)

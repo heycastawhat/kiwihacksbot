@@ -5,7 +5,7 @@ import { completeSubmission, cancelPendingSubmission } from '../db';
 
 export interface DMFlowState {
   submissionId: string;
-  step: 'name' | 'description' | 'github_link' | 'address';
+  step: 'name' | 'address';
   projectName?: string;
   description?: string;
   githubLink?: string;
@@ -44,7 +44,7 @@ export async function handleMessageCreate(message: Message): Promise<void> {
     }
 
     flow.projectName = text;
-    flow.step = 'description';
+    flow.step = 'address';
     flow.timeoutHandle = scheduleTimeout(message.author.id, flow.submissionId);
 
     await (message.channel as DMChannel).send({
@@ -53,47 +53,14 @@ export async function handleMessageCreate(message: Message): Promise<void> {
           color: 0x5865f2,
           title: `Success - "${text}"`,
           description:
-            '**Now describe your project in one sentence.**\n*(Max 280 characters)*',
-          footer: { text: 'Keep it punchy!' },
+            '**Finally, please provide your shipping address.**\n*(We need this in case you win a prize. It will be kept secret!)*',
         },
       ],
     });
     return;
   }
 
-  // ── Step 2: collect description ───────────────────────────────────────────
-  if (flow.step === 'description') {
-    if (!text || text.length > 280) {
-      flow.timeoutHandle = scheduleTimeout(message.author.id, flow.submissionId);
-      await (message.channel as DMChannel).send(
-        'Error: Description must be 1–280 characters. Try again:',
-      );
-      return;
-    }
-
-    flow.description = text;
-    flow.step = 'github_link';
-    flow.timeoutHandle = scheduleTimeout(message.author.id, flow.submissionId);
-
-    await (message.channel as DMChannel).send(
-      'Awesome! Now, please provide a **GitHub link** to your project repository.',
-    );
-    return;
-  }
-
-  // ── Step 3: collect github link ───────────────────────────────────────────
-  if (flow.step === 'github_link') {
-    flow.githubLink = text;
-    flow.step = 'address';
-    flow.timeoutHandle = scheduleTimeout(message.author.id, flow.submissionId);
-
-    await (message.channel as DMChannel).send(
-      'Great! Finally, please provide your **shipping address**. We need this in case you win a prize (it will be kept secret!)',
-    );
-    return;
-  }
-
-  // ── Step 4: collect address ───────────────────────────────────────────────
+  // ── Step 2: collect address ───────────────────────────────────────────────
   if (flow.step === 'address') {
     const projectName = flow.projectName!;
     const description = flow.description!;

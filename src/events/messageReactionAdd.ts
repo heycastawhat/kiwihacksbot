@@ -92,17 +92,37 @@ export async function handleMessageReactionAdd(
       embeds: [
         {
           color: 0x5865f2,
-          title: 'Project Submission',
+          title: 'Project Submission Started!',
           description:
-            "Let's get your project listed on the board!\n\n**What's your project called?**",
-          footer: { text: "Type your project name - you've got 5 minutes" },
+            `You reacted to your message in <#${message.channelId}>.\n\n` +
+            `**First, please provide a short name for your project.**\n*(Max 100 characters)*`,
         },
       ],
     });
 
-    const timeoutHandle = startDMFlowTimeout(user.id, submissionId);
-    pendingDMFlows.set(user.id, { submissionId, step: 'name', timeoutHandle });
-  } catch {
+    // ── Create a thread for discussion ────────────────────────────────────────
+    try {
+      await fullMessage.startThread({
+        name: `${(user as User).username}'s Project`,
+        autoArchiveDuration: 1440,
+      });
+    } catch (e) {
+      console.log('[reaction] failed to create thread:', e);
+    }
+
+    // ── Extract description and github link ───────────────────────────────────
+    const description = fullMessage.content || 'No description provided';
+    const githubMatch = description.match(/https?:\/\/(www\.)?github\.com\/[^\s]+/i);
+    const githubLink = githubMatch ? githubMatch[0] : '';
+
+    pendingDMFlows.set(user.id, {
+      submissionId: submissionId,
+      step: 'name',
+      description: description,
+      githubLink: githubLink,
+      timeoutHandle: startDMFlowTimeout(user.id, submissionId),
+    });
+  } catch (e) {
     // User has DMs closed — cancel the pending record
     const { cancelPendingSubmission } = await import('../db');
     await cancelPendingSubmission(submissionId);
