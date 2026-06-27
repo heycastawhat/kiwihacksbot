@@ -5,9 +5,10 @@ import { completeSubmission, cancelPendingSubmission } from '../db';
 
 export interface DMFlowState {
   submissionId: string;
-  step: 'name' | 'description' | 'address';
+  step: 'name' | 'description' | 'github_link' | 'address';
   projectName?: string;
   description?: string;
+  githubLink?: string;
   /** setTimeout handle used to cancel the flow if the user goes idle */
   timeoutHandle: ReturnType<typeof setTimeout>;
 }
@@ -71,23 +72,36 @@ export async function handleMessageCreate(message: Message): Promise<void> {
     }
 
     flow.description = text;
-    flow.step = 'address';
+    flow.step = 'github_link';
     flow.timeoutHandle = scheduleTimeout(message.author.id, flow.submissionId);
 
     await (message.channel as DMChannel).send(
-      'Awesome! Finally, please provide your **shipping address**. We need this in case you win a prize (it will be kept secret!)',
+      'Awesome! Now, please provide a **GitHub link** to your project repository.',
     );
     return;
   }
 
-  // ── Step 3: collect address ───────────────────────────────────────────────
+  // ── Step 3: collect github link ───────────────────────────────────────────
+  if (flow.step === 'github_link') {
+    flow.githubLink = text;
+    flow.step = 'address';
+    flow.timeoutHandle = scheduleTimeout(message.author.id, flow.submissionId);
+
+    await (message.channel as DMChannel).send(
+      'Great! Finally, please provide your **shipping address**. We need this in case you win a prize (it will be kept secret!)',
+    );
+    return;
+  }
+
+  // ── Step 4: collect address ───────────────────────────────────────────────
   if (flow.step === 'address') {
     const projectName = flow.projectName!;
     const description = flow.description!;
+    const githubLink = flow.githubLink!;
     const address = text;
 
     // Persist to DB
-    await completeSubmission(flow.submissionId, projectName, description, address);
+    await completeSubmission(flow.submissionId, projectName, description, githubLink, address);
     pendingDMFlows.delete(message.author.id);
 
     await (message.channel as DMChannel).send({

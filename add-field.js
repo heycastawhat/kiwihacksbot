@@ -1,3 +1,4 @@
+require('dotenv').config();
 const API_KEY = process.env.AIRTABLE_API_KEY;
 const BASE_ID = process.env.AIRTABLE_BASE_ID;
 
@@ -15,14 +16,14 @@ async function run() {
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
-      name: 'address',
-      type: 'multilineText'
+      name: 'github_link',
+      type: 'url'
     })
   });
   
   const data = await response.json();
   if (response.ok) {
-    console.log('Added address field:', data);
+    console.log('Added github_link field:', data);
   } else {
     console.error('Error adding field:', data);
   }

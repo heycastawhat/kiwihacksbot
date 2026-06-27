@@ -13,6 +13,7 @@ export interface Submission {
   channel_id: string;
   project_name: string | null;
   description: string | null;
+  github_link: string | null;
   address: string | null;
   month: number;
   year: number;
@@ -58,6 +59,7 @@ export async function getSubmissionByUserAndMonth(
     channel_id: r.get('channel_id') as string,
     project_name: r.get('project_name') as string,
     description: r.get('description') as string,
+    github_link: (r.get('github_link') as string) || null,
     address: (r.get('address') as string) || null,
     month: r.get('month') as number,
     year: r.get('year') as number,
@@ -109,6 +111,7 @@ export async function completeSubmission(
   id: string,
   projectName: string,
   description: string,
+  githubLink: string,
   address: string,
 ): Promise<void> {
   await base('submissions').update([
@@ -117,6 +120,7 @@ export async function completeSubmission(
       fields: {
         project_name: projectName,
         description: description,
+        github_link: githubLink,
         address: address,
         status: 'active'
       }
@@ -141,6 +145,7 @@ export async function getActiveSubmissions(month: number, year: number): Promise
     channel_id: r.get('channel_id') as string,
     project_name: r.get('project_name') as string,
     description: r.get('description') as string,
+    github_link: (r.get('github_link') as string) || null,
     address: (r.get('address') as string) || null,
     month: r.get('month') as number,
     year: r.get('year') as number,

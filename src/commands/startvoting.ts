@@ -105,7 +105,7 @@ export const startVotingCommand = {
       const embed = new EmbedBuilder()
         .setColor(0x5865f2)
         .setTitle(sub.project_name || 'Untitled')
-        .setDescription(sub.description || 'No description provided.')
+        .setDescription(`${sub.description || 'No description provided.'}\n\n**GitHub:** ${sub.github_link || 'Not provided'}`)
         .setAuthor({ name: sub.username });
 
       const button = new ButtonBuilder()

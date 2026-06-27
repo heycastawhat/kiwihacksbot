@@ -106,6 +106,7 @@ export const endVotingCommand = {
           { name: 'Submitted by', value: `<@${sub.user_id}>`, inline: true },
           { name: 'Discord ID',   value: sub.user_id,          inline: true },
           { name: 'Votes',        value: String(sub.vote_count), inline: true },
+          { name: 'GitHub',       value: sub.github_link || 'Not provided', inline: false },
           { name: 'Address',      value: sub.address || 'No address provided', inline: false }
         )
         .setFooter({ text: `Submission ID: ${sub.id}` });
