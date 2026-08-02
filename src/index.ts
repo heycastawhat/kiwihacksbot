@@ -5,12 +5,16 @@ import { handleMessageReactionAdd } from './events/messageReactionAdd';
 import { handleMessageCreate } from './events/messageCreate';
 import { handleInteractionCreate } from './events/interactionCreate';
 import { endVotingCommand } from './commands/endvoting';
+import { standupManualCommand } from './commands/standupmanual';
+import { standupEndCommand } from './commands/standupend';
+import { startStandupScheduler } from './standup/scheduler';
 
 // ─── Client ───────────────────────────────────────────────────────────────────
 
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.GuildMessageReactions,
     GatewayIntentBits.MessageContent,
@@ -29,10 +33,15 @@ const client = new Client({
 
 const commands = new Collection<string, any>();
 commands.set(endVotingCommand.data.name, endVotingCommand);
+commands.set(standupManualCommand.data.name, standupManualCommand);
+commands.set(standupEndCommand.data.name, standupEndCommand);
 
 // ─── Events ───────────────────────────────────────────────────────────────────
 
-client.once('clientReady', () => handleReady(client));
+client.once('clientReady', () => {
+  handleReady(client);
+  startStandupScheduler(client);
+});
 
 client.on('messageReactionAdd', handleMessageReactionAdd);
 

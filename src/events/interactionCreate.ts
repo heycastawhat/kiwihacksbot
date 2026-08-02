@@ -5,13 +5,10 @@ import {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  ModalBuilder,
-  TextInputBuilder,
-  TextInputStyle,
-  ModalActionRowComponentBuilder,
   TextChannel,
 } from 'discord.js';
-import { hasVoted, addVote, removeVote, getVoteCount, getActiveVotingSession } from '../db';
+import { hasVoted, addVote, removeVote, getVoteCount, getActiveVotingSession, getSubmissionByMessageId, createSubmission } from '../db';
+import { config } from '../config';
 
 export async function handleInteractionCreate(
   interaction: Interaction,
@@ -40,69 +37,11 @@ export async function handleInteractionCreate(
   if (interaction.isButton()) {
     await handleVoteButton(interaction);
   }
-
-  // ── Modals ───────────────────────────────────────────────────────────────
-  if (interaction.isModalSubmit()) {
-    if (interaction.customId.startsWith('addrmodal_')) {
-      const opsChannelId = interaction.customId.replace('addrmodal_', '');
-      const address = interaction.fields.getTextInputValue('addressInput');
-      
-      try {
-        const opsChannel = await interaction.client.channels.fetch(opsChannelId) as TextChannel;
-        await opsChannel.send({
-          content: `Address received from <@${interaction.user.id}>:\n\`\`\`\n${address}\n\`\`\``
-        });
-        await interaction.reply({ content: 'Thank you! Your address has been sent.', ephemeral: true });
-      } catch {
-        await interaction.reply({ content: 'Error: Could not deliver address to the ops channel.', ephemeral: true });
-      }
-    }
-  }
 }
 
 async function handleVoteButton(interaction: ButtonInteraction): Promise<void> {
-  if (interaction.customId.startsWith('reqaddr_') || interaction.customId.startsWith('address_')) {
-    const prefix = interaction.customId.startsWith('reqaddr_') ? 'reqaddr_' : 'address_';
-    const userId = interaction.customId.replace(prefix, '');
-    const user = await interaction.client.users.fetch(userId).catch(() => null);
-    if (!user) {
-      await interaction.reply({ content: 'Error: Could not find that user.', ephemeral: true });
-      return;
-    }
-    const dmRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`provaddr_${interaction.channelId}`)
-        .setLabel('Provide Address')
-        .setStyle(ButtonStyle.Primary)
-    );
-    try {
-      await user.send({
-        content: 'Congratulations on winning! The ops team needs your shipping address.',
-        components: [dmRow]
-      });
-      await interaction.reply({ content: 'Address request sent to user.', ephemeral: true });
-    } catch {
-      await interaction.reply({ content: 'Error: Could not DM the user (DMs might be closed).', ephemeral: true });
-    }
-    return;
-  }
-
-  if (interaction.customId.startsWith('provaddr_')) {
-    const opsChannelId = interaction.customId.replace('provaddr_', '');
-    const modal = new ModalBuilder()
-      .setCustomId(`addrmodal_${opsChannelId}`)
-      .setTitle('Shipping Address');
-      
-    const addressInput = new TextInputBuilder()
-      .setCustomId('addressInput')
-      .setLabel('Enter your full address')
-      .setStyle(TextInputStyle.Paragraph)
-      .setRequired(true);
-      
-    const actionRow = new ActionRowBuilder<ModalActionRowComponentBuilder>().addComponents(addressInput);
-    modal.addComponents(actionRow);
-    
-    await interaction.showModal(modal);
+  if (interaction.customId.startsWith('shipconfirm_yes_') || interaction.customId.startsWith('shipconfirm_no_')) {
+    await handleShipConfirm(interaction);
     return;
   }
 
@@ -111,10 +50,12 @@ async function handleVoteButton(interaction: ButtonInteraction): Promise<void> {
   const submissionId = interaction.customId.slice('vote_'.length);
   if (!submissionId) return;
 
+  await interaction.deferUpdate();
+
   // Reject votes outside an active session
   const session = await getActiveVotingSession();
   if (!session) {
-    await interaction.reply({
+    await interaction.followUp({
       content: 'Error: Voting is not currently open.',
       ephemeral: true,
     });
@@ -141,5 +82,70 @@ async function handleVoteButton(interaction: ButtonInteraction): Promise<void> {
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(newButton);
 
   // Update the message in place — no separate reply needed
-  await interaction.update({ components: [row] });
+  await interaction.editReply({ components: [row] });
+}
+
+async function handleShipConfirm(interaction: ButtonInteraction): Promise<void> {
+  await interaction.deferUpdate();
+
+  const isYes = interaction.customId.startsWith('shipconfirm_yes_');
+  const messageId = interaction.customId.replace(isYes ? 'shipconfirm_yes_' : 'shipconfirm_no_', '');
+
+  let original;
+  try {
+    const parentChannel = (interaction.channel as any)?.parent as TextChannel;
+    original = await parentChannel.messages.fetch(messageId);
+  } catch {
+    await interaction.editReply({ content: 'Error: Could not find the original post.', components: [] });
+    return;
+  }
+
+  if (interaction.user.id !== original.author.id) {
+    await interaction.followUp({ content: 'Only the original poster can confirm this.', ephemeral: true });
+    return;
+  }
+
+  if (!isYes) {
+    await interaction.editReply({ content: "No worries — this post won't be entered for voting.", components: [] });
+    return;
+  }
+
+  const existing = await getSubmissionByMessageId(messageId);
+  if (existing) {
+    await interaction.editReply({ content: 'This post is already confirmed for voting!', components: [] });
+    return;
+  }
+
+  const now = new Date();
+  const description = original.content || 'No description provided';
+
+  await createSubmission(
+    original.author.id,
+    original.author.username,
+    original.id,
+    original.channelId,
+    description,
+    now.getMonth() + 1,
+    now.getFullYear(),
+  );
+
+  try {
+    await original.react(config.voteEmoji);
+  } catch (e) {
+    console.log('[shipconfirm] failed to seed vote reaction:', e);
+  }
+
+  try {
+    const filloutUrl = `${config.filloutFormUrl}?discord=${encodeURIComponent(original.author.username)}`;
+    await original.author.send(
+      `Nice ship! Fill out this form with your project details and we might mail you a free KiwiHacks sticker too: ${filloutUrl}`,
+    );
+  } catch (e) {
+    console.log('[shipconfirm] failed to DM fillout link:', e);
+  }
+
+  await interaction.editReply({
+    content: `Submission confirmed! React with ${config.voteEmoji} on the original post to vote.`,
+    components: [],
+  });
 }

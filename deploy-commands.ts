@@ -2,19 +2,15 @@
  * Run this once to register slash commands with Discord.
  *   npm run deploy
  *
- * Commands are registered to both the submission guild and the ops guild
- * so admins in either server can run /startvoting and /endvoting.
+ * Voting commands register to the ops guild. Standup commands register to the
+ * guild that owns the standup channel (resolved at runtime), plus the ops guild.
  */
 
 import { REST, Routes } from 'discord.js';
 import { config } from './src/config';
-import { startVotingCommand } from './src/commands/startvoting';
 import { endVotingCommand } from './src/commands/endvoting';
-
-const commandBodies = [
-  startVotingCommand.data.toJSON(),
-  endVotingCommand.data.toJSON(),
-];
+import { standupManualCommand } from './src/commands/standupmanual';
+import { standupEndCommand } from './src/commands/standupend';
 
 const rest = new REST({ version: '10' }).setToken(config.token);
 
@@ -22,11 +18,25 @@ const rest = new REST({ version: '10' }).setToken(config.token);
   try {
     console.log('Registering slash commands…');
 
-    await rest.put(
-      Routes.applicationGuildCommands(config.clientId, config.opsGuildId),
-      { body: commandBodies },
-    );
+    // Which guild owns the standup channel?
+    const channel = (await rest.get(Routes.channel(config.standupChannelId))) as { guild_id?: string };
+    const standupGuildId = channel.guild_id;
+
+    await rest.put(Routes.applicationGuildCommands(config.clientId, config.opsGuildId), {
+      body: [
+        endVotingCommand.data.toJSON(),
+        standupManualCommand.data.toJSON(),
+        standupEndCommand.data.toJSON(),
+      ],
+    });
     console.log(`  ✅ Registered to ops guild ${config.opsGuildId}`);
+
+    if (standupGuildId && standupGuildId !== config.opsGuildId) {
+      await rest.put(Routes.applicationGuildCommands(config.clientId, standupGuildId), {
+        body: [standupManualCommand.data.toJSON(), standupEndCommand.data.toJSON()],
+      });
+      console.log(`  ✅ Registered standup commands to guild ${standupGuildId}`);
+    }
 
     console.log('Done!');
   } catch (err) {

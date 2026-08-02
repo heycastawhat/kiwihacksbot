@@ -13,8 +13,6 @@ export interface Submission {
   channel_id: string;
   project_name: string | null;
   description: string | null;
-  github_link: string | null;
-  address: string | null;
   month: number;
   year: number;
   submitted_at: string;
@@ -37,50 +35,16 @@ export interface VotingMessage {
   session_id: string;
 }
 
+export interface StandupDay {
+  id: string;
+  date: string;
+  channel_id: string;
+  thread_id: string;
+  posted_at: string;
+  ended_at: string | null;
+}
+
 // ─── Submissions ──────────────────────────────────────────────────────────────
-
-export async function getSubmissionByUserAndMonth(
-  userId: string,
-  month: number,
-  year: number,
-): Promise<Submission | undefined> {
-  const records = await base('submissions').select({
-    filterByFormula: `AND({user_id} = '${userId}', {month} = ${month}, {year} = ${year}, {status} = 'active')`,
-    maxRecords: 1
-  }).firstPage();
-
-  if (records.length === 0) return undefined;
-  const r = records[0];
-  return {
-    id: r.id,
-    user_id: r.get('user_id') as string,
-    username: r.get('username') as string,
-    message_id: r.get('message_id') as string,
-    channel_id: r.get('channel_id') as string,
-    project_name: r.get('project_name') as string,
-    description: r.get('description') as string,
-    github_link: (r.get('github_link') as string) || null,
-    address: (r.get('address') as string) || null,
-    month: r.get('month') as number,
-    year: r.get('year') as number,
-    submitted_at: r.get('submitted_at') as string,
-    status: r.get('status') as string,
-  };
-}
-
-export async function getPendingSubmission(userId: string): Promise<Submission | undefined> {
-  const records = await base('submissions').select({
-    filterByFormula: `AND({user_id} = '${userId}', {status} = 'pending')`,
-    maxRecords: 1
-  }).firstPage();
-
-  if (records.length === 0) return undefined;
-  const r = records[0];
-  return {
-    id: r.id,
-    user_id: r.get('user_id') as string,
-  } as Submission;
-}
 
 export async function getSubmissionByMessageId(messageId: string): Promise<Submission | undefined> {
   const records = await base('submissions').select({
@@ -98,8 +62,6 @@ export async function getSubmissionByMessageId(messageId: string): Promise<Submi
     channel_id: r.get('channel_id') as string,
     project_name: r.get('project_name') as string,
     description: r.get('description') as string,
-    github_link: (r.get('github_link') as string) || null,
-    address: (r.get('address') as string) || null,
     month: r.get('month') as number,
     year: r.get('year') as number,
     submitted_at: r.get('submitted_at') as string,
@@ -112,6 +74,7 @@ export async function createSubmission(
   username: string,
   messageId: string,
   channelId: string,
+  description: string,
   month: number,
   year: number,
 ): Promise<string> {
@@ -122,39 +85,15 @@ export async function createSubmission(
         username,
         message_id: messageId,
         channel_id: channelId,
+        description,
         month,
         year,
-        status: 'pending',
+        status: 'active',
         submitted_at: new Date().toISOString(),
       }
     }
   ]);
   return records[0].id;
-}
-
-export async function completeSubmission(
-  id: string,
-  projectName: string,
-  description: string,
-  githubLink: string,
-  address: string,
-): Promise<void> {
-  await base('submissions').update([
-    {
-      id,
-      fields: {
-        project_name: projectName,
-        description: description,
-        github_link: githubLink,
-        address: address,
-        status: 'active'
-      }
-    }
-  ]);
-}
-
-export async function cancelPendingSubmission(id: string): Promise<void> {
-  await base('submissions').destroy([id]);
 }
 
 export async function closeAllActiveSubmissions(month: number, year: number): Promise<void> {
@@ -187,8 +126,6 @@ export async function getActiveSubmissions(month: number, year: number): Promise
     channel_id: r.get('channel_id') as string,
     project_name: r.get('project_name') as string,
     description: r.get('description') as string,
-    github_link: (r.get('github_link') as string) || null,
-    address: (r.get('address') as string) || null,
     month: r.get('month') as number,
     year: r.get('year') as number,
     submitted_at: r.get('submitted_at') as string,
@@ -336,4 +273,76 @@ export async function getVotingMessageBySubmission(
     message_id: r.get('message_id') as string,
     session_id: r.get('session_id') as string,
   };
+}
+
+// ─── Standups ─────────────────────────────────────────────────────────────────
+
+export async function getStandupDay(date: string): Promise<StandupDay | undefined> {
+  const records = await base('standup_days').select({
+    filterByFormula: `{date} = '${date}'`,
+    maxRecords: 1
+  }).firstPage();
+
+  if (records.length === 0) return undefined;
+  const r = records[0];
+  return {
+    id: r.id,
+    date: r.get('date') as string,
+    channel_id: r.get('channel_id') as string,
+    thread_id: r.get('thread_id') as string,
+    posted_at: r.get('posted_at') as string,
+    ended_at: (r.get('ended_at') as string) || null,
+  };
+}
+
+export async function endStandupDay(id: string): Promise<void> {
+  await base('standup_days').update([
+    {
+      id,
+      fields: { ended_at: new Date().toISOString() }
+    }
+  ]);
+}
+
+export async function createStandupDay(date: string, channelId: string, threadId: string): Promise<void> {
+  await base('standup_days').create([
+    {
+      fields: {
+        date,
+        channel_id: channelId,
+        thread_id: threadId,
+        posted_at: new Date().toISOString()
+      }
+    }
+  ]);
+}
+
+export async function hasStandupResponse(threadId: string, userId: string): Promise<boolean> {
+  const records = await base('standup_responses').select({
+    filterByFormula: `AND({thread_id} = '${threadId}', {user_id} = '${userId}')`,
+    maxRecords: 1
+  }).firstPage();
+  return records.length > 0;
+}
+
+export async function addStandupResponse(threadId: string, userId: string): Promise<void> {
+  const already = await hasStandupResponse(threadId, userId);
+  if (!already) {
+    await base('standup_responses').create([
+      {
+        fields: {
+          thread_id: threadId,
+          user_id: userId,
+          responded_at: new Date().toISOString()
+        }
+      }
+    ]);
+  }
+}
+
+export async function getStandupResponders(threadId: string): Promise<string[]> {
+  const records = await base('standup_responses').select({
+    filterByFormula: `{thread_id} = '${threadId}'`
+  }).all();
+  return records.map(r => r.get('user_id') as string);
 }

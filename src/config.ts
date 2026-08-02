@@ -18,12 +18,17 @@ export const config = {
   opsGuildId: '1512948988817444874',
   opsChannelId: '1520190698928865321',
 
-  // The emoji users react with to trigger submission
-  submissionEmoji: '⭐',
+  // Emoji used to cast an anytime vote on a confirmed #ship post
+  voteEmoji: '⭐',
 
-  // All channels where a ⭐ reaction triggers the submission flow
-  // (ops channel included for testing)
-  get validSubmissionChannels() {
-    return [this.submissionChannelId, this.opsChannelId];
-  },
+  // Standup channel: daily prompt thread + bumps every 2 hours until everyone's replied
+  standupChannelId: '1512967046411845642',
+  standupTimezone: 'Pacific/Auckland',
+  standupHour: 8, // 24h local time (standupTimezone) for the daily prompt
+
+  // Members excluded from standup pings/bumps entirely
+  standupExcludedUserIds: ['483921161340846081', '1482632634025771140'], // Lucy
+
+  // Fillout form DMed to users once they confirm a #ship post
+  filloutFormUrl: 'https://kiwihacks.fillout.com/community-stickers',
 };

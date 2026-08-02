@@ -1,107 +1,42 @@
-import { Message, DMChannel } from 'discord.js';
-import { completeSubmission, cancelPendingSubmission } from '../db';
-
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-export interface DMFlowState {
-  submissionId: string;
-  step: 'name' | 'address';
-  projectName?: string;
-  description?: string;
-  githubLink?: string;
-  /** setTimeout handle used to cancel the flow if the user goes idle */
-  timeoutHandle: ReturnType<typeof setTimeout>;
-}
-
-/** Keyed by Discord user ID */
-export const pendingDMFlows = new Map<string, DMFlowState>();
-
-const DM_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
-
-// ─── Handler ──────────────────────────────────────────────────────────────────
+import { Message, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+import { config } from '../config';
+import { addStandupResponse } from '../db';
 
 export async function handleMessageCreate(message: Message): Promise<void> {
-  // Only care about DMs from real users
-  if (message.guild) return;
   if (message.author.bot) return;
 
-  const flow = pendingDMFlows.get(message.author.id);
-  if (!flow) return;
-
-  // Reset inactivity timeout on every message
-  clearTimeout(flow.timeoutHandle);
-
-  const text = message.content.trim();
-
-  // ── Step 1: collect project name ──────────────────────────────────────────
-  if (flow.step === 'name') {
-    if (!text || text.length > 100) {
-      flow.timeoutHandle = scheduleTimeout(message.author.id, flow.submissionId);
-      await (message.channel as DMChannel).send(
-        'Error: Project name must be 1–100 characters. Give it another go:',
-      );
-      return;
-    }
-
-    flow.projectName = text;
-    flow.step = 'address';
-    flow.timeoutHandle = scheduleTimeout(message.author.id, flow.submissionId);
-
-    await (message.channel as DMChannel).send({
-      embeds: [
-        {
-          color: 0x5865f2,
-          title: `Success - "${text}"`,
-          description:
-            '**Finally, please provide your shipping address.**\n*(We need this in case you win a prize. It will be kept secret!)*',
-        },
-      ],
-    });
+  if (message.channel.isThread() && message.channel.parentId === config.standupChannelId) {
+    await addStandupResponse(message.channelId, message.author.id);
     return;
   }
 
-  // ── Step 2: collect address ───────────────────────────────────────────────
-  if (flow.step === 'address') {
-    const projectName = flow.projectName!;
-    const description = flow.description!;
-    const githubLink = flow.githubLink!;
-    const address = text;
+  // Ops channel included so the flow can be demoed without posting in #ship
+  if (![config.submissionChannelId, config.opsChannelId].includes(message.channelId)) return;
 
-    // Persist to DB
-    await completeSubmission(flow.submissionId, projectName, description, githubLink, address);
-    pendingDMFlows.delete(message.author.id);
-
-    await (message.channel as DMChannel).send({
-      embeds: [
-        {
-          color: 0x57f287,
-          title: 'Submission received!',
-          description:
-            "You're in! Voting opens at the end of the month - good luck!",
-          footer: { text: 'KiwiHacks Project Board' },
-        },
-      ],
+  let thread;
+  try {
+    thread = await message.startThread({
+      name: `${message.author.username}'s Project`,
+      autoArchiveDuration: 1440,
     });
+  } catch (e) {
+    console.log('[messageCreate] failed to create thread:', e);
+    return;
   }
-}
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`shipconfirm_yes_${message.id}`)
+      .setLabel('Yes')
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId(`shipconfirm_no_${message.id}`)
+      .setLabel('No')
+      .setStyle(ButtonStyle.Secondary),
+  );
 
-/**
- * Starts a 5-minute inactivity timer. If the user doesn't respond in time,
- * the pending submission is cancelled and removed from memory.
- */
-function scheduleTimeout(userId: string, submissionId: string) {
-  return setTimeout(async () => {
-    pendingDMFlows.delete(userId);
-    await cancelPendingSubmission(submissionId);
-    // We can't easily DM here without a client ref — the timeout is best-effort.
-    // The next star reaction will create a fresh flow.
-    console.log(`[DM flow] Timed out for user ${userId}, submission ${submissionId} cancelled.`);
-  }, DM_TIMEOUT_MS);
-}
-
-/** Public helper: starts a fresh DM flow timeout when the flow is first created */
-export function startDMFlowTimeout(userId: string, submissionId: string) {
-  return scheduleTimeout(userId, submissionId);
+  await thread.send({
+    content: 'Do you want to make this a submission post for voting?',
+    components: [row],
+  });
 }
