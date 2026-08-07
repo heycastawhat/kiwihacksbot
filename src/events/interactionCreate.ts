@@ -6,10 +6,10 @@ import {
   ButtonBuilder,
   ButtonStyle,
   TextChannel,
-  Message,
 } from 'discord.js';
 import { hasVoted, addVote, removeVote, getVoteCount, getActiveVotingSession, getSubmissionByMessageId, createSubmission } from '../db';
 import { config } from '../config';
+import { missingRequirements } from '../submissionRules';
 
 export async function handleInteractionCreate(
   interaction: Interaction,
@@ -84,21 +84,6 @@ async function handleVoteButton(interaction: ButtonInteraction): Promise<void> {
 
   // Update the message in place — no separate reply needed
   await interaction.editReply({ components: [row] });
-}
-
-const LINK_RE = /https?:\/\/\S+/i;
-
-// Entry requirements. The image check matches what endvoting pulls into the results embed,
-// so anything that passes here is guaranteed to render with a screenshot.
-function missingRequirements(message: Message): string[] {
-  const missing: string[] = [];
-  if (!message.attachments.some((a) => a.contentType?.startsWith('image/'))) {
-    missing.push('an image or screenshot attached');
-  }
-  if (!LINK_RE.test(message.content)) {
-    missing.push('at least one link');
-  }
-  return missing;
 }
 
 async function handleShipConfirm(interaction: ButtonInteraction): Promise<void> {
