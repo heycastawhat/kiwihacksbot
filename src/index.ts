@@ -1,7 +1,7 @@
 import { Client, Collection, GatewayIntentBits, Partials } from 'discord.js';
 import { config } from './config';
 import { handleReady } from './events/ready';
-import { handleMessageReactionAdd } from './events/messageReactionAdd';
+import { handleMessageReactionAdd, handleMessageReactionRemove } from './events/messageReaction';
 import { handleMessageCreate } from './events/messageCreate';
 import { handleInteractionCreate } from './events/interactionCreate';
 import { endVotingCommand } from './commands/endvoting';
@@ -44,6 +44,8 @@ client.once('clientReady', () => {
 });
 
 client.on('messageReactionAdd', handleMessageReactionAdd);
+
+client.on('messageReactionRemove', handleMessageReactionRemove);
 
 client.on('messageCreate', handleMessageCreate);
 

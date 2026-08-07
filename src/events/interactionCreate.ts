@@ -136,7 +136,12 @@ async function handleShipConfirm(interaction: ButtonInteraction): Promise<void> 
   }
 
   try {
-    const filloutUrl = `${config.filloutFormUrl}?discord=${encodeURIComponent(original.author.username)}`;
+    // submission is the join key back to submissions.message_id — unique per ship post, so a
+    // second project from the same person stays distinguishable. discord_id is for fulfilment.
+    const filloutUrl =
+      `${config.filloutFormUrl}?submission=${original.id}` +
+      `&discord_id=${original.author.id}` +
+      `&discord=${encodeURIComponent(original.author.username)}`;
     await original.author.send(
       `Nice ship! Fill out this form with your project details and we might mail you a free KiwiHacks sticker too: ${filloutUrl}`,
     );

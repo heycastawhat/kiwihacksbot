@@ -104,10 +104,10 @@ export const endVotingCommand = {
       const embed = new EmbedBuilder()
         .setColor(color)
         .setTitle(`${medal} ${sub.project_name || sub.username || 'Untitled'}`)
-        .setDescription(sub.description!);
-      
+        .setDescription(sub.description || 'No description provided');
+
       if (imageUrl) embed.setImage(imageUrl);
-      
+
       embed.addFields(
           { name: 'Submitted by', value: `<@${sub.user_id}>`, inline: true },
           { name: 'Discord ID',   value: sub.user_id,          inline: true },
