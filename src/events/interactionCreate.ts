@@ -6,6 +6,7 @@ import {
   ButtonBuilder,
   ButtonStyle,
   TextChannel,
+  Message,
 } from 'discord.js';
 import { hasVoted, addVote, removeVote, getVoteCount, getActiveVotingSession, getSubmissionByMessageId, createSubmission } from '../db';
 import { config } from '../config';
@@ -85,6 +86,21 @@ async function handleVoteButton(interaction: ButtonInteraction): Promise<void> {
   await interaction.editReply({ components: [row] });
 }
 
+const LINK_RE = /https?:\/\/\S+/i;
+
+// Entry requirements. The image check matches what endvoting pulls into the results embed,
+// so anything that passes here is guaranteed to render with a screenshot.
+function missingRequirements(message: Message): string[] {
+  const missing: string[] = [];
+  if (!message.attachments.some((a) => a.contentType?.startsWith('image/'))) {
+    missing.push('an image or screenshot attached');
+  }
+  if (!LINK_RE.test(message.content)) {
+    missing.push('at least one link');
+  }
+  return missing;
+}
+
 async function handleShipConfirm(interaction: ButtonInteraction): Promise<void> {
   await interaction.deferUpdate();
 
@@ -107,6 +123,16 @@ async function handleShipConfirm(interaction: ButtonInteraction): Promise<void> 
 
   if (!isYes) {
     await interaction.editReply({ content: "No worries — this post won't be entered for voting.", components: [] });
+    return;
+  }
+
+  // Leave the buttons in place so they can edit the post and hit Yes again
+  const missing = missingRequirements(original);
+  if (missing.length > 0) {
+    await interaction.followUp({
+      content: `Your post needs ${missing.join(' and ')} before it can be entered. Add it to the post, then hit Yes again.`,
+      ephemeral: true,
+    });
     return;
   }
 

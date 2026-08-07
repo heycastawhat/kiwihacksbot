@@ -36,7 +36,9 @@ export async function handleMessageCreate(message: Message): Promise<void> {
   );
 
   await thread.send({
-    content: 'Do you want to make this a submission post for voting?',
+    content:
+      'Do you want to make this a submission post for voting?\n' +
+      'Entries need an image or screenshot attached, plus at least one link.',
     components: [row],
   });
 }
