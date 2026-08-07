@@ -1,7 +1,7 @@
 import { Message, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { config } from '../config';
 import { addStandupResponse } from '../db';
-import { missingRequirements } from '../submissionRules';
+import { missingRequirements, displayNameOf } from '../submissionRules';
 
 const MAX_PREVIEW = 1500;
 
@@ -51,7 +51,7 @@ export async function handleMessageCreate(message: Message): Promise<void> {
   let thread;
   try {
     thread = await message.startThread({
-      name: `${message.author.username}'s Project`,
+      name: `${displayNameOf(message)}'s Project`,
       autoArchiveDuration: 1440,
     });
   } catch (e) {

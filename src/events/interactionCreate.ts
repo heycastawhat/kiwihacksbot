@@ -9,7 +9,7 @@ import {
 } from 'discord.js';
 import { hasVoted, addVote, removeVote, getVoteCount, getActiveVotingSession, getSubmissionByMessageId, createSubmission } from '../db';
 import { config } from '../config';
-import { missingRequirements } from '../submissionRules';
+import { missingRequirements, displayNameOf } from '../submissionRules';
 
 export async function handleInteractionCreate(
   interaction: Interaction,
@@ -132,7 +132,7 @@ async function handleShipConfirm(interaction: ButtonInteraction): Promise<void> 
 
   await createSubmission(
     original.author.id,
-    original.author.username,
+    displayNameOf(original),
     original.id,
     original.channelId,
     description,
@@ -152,7 +152,7 @@ async function handleShipConfirm(interaction: ButtonInteraction): Promise<void> 
     const filloutUrl =
       `${config.filloutFormUrl}?submission=${original.id}` +
       `&discord_id=${original.author.id}` +
-      `&discord=${encodeURIComponent(original.author.username)}`;
+      `&discord=${encodeURIComponent(displayNameOf(original))}`;
     await original.author.send(
       `Nice ship! Fill out this form with your project details and we might mail you a free KiwiHacks sticker too: ${filloutUrl}`,
     );
