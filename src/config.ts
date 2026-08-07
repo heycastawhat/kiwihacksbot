@@ -27,7 +27,7 @@ export const config = {
   standupHour: 8, // 24h local time (standupTimezone) for the daily prompt
 
   // Members excluded from standup pings/bumps entirely
-  standupExcludedUserIds: ['483921161340846081', '1482632634025771140'], // Lucy
+  standupExcludedUserIds: ['483921161340846081', '1482632634025771140', '614908394565926979'], // Lucy
 
   // Fillout form DMed to users once they confirm a #ship post
   filloutFormUrl: 'https://kiwihacks.fillout.com/community-stickers',

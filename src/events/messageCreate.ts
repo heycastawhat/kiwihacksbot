@@ -36,16 +36,12 @@ export async function handleMessageCreate(message: Message): Promise<void> {
     return;
   }
 
-  // Ops channel included so the flow can be demoed without posting in #ship
-  if (![config.submissionChannelId, config.opsChannelId].includes(message.channelId)) return;
+  if (message.channelId !== config.submissionChannelId) return;
 
-  // Enforced in #ship only — the ops channel is a demo/chatter space and must never be pruned
-  if (message.channelId === config.submissionChannelId) {
-    const missing = missingRequirements(message);
-    if (missing.length > 0) {
-      await returnAndDelete(message, missing);
-      return;
-    }
+  const missing = missingRequirements(message);
+  if (missing.length > 0) {
+    await returnAndDelete(message, missing);
+    return;
   }
 
   let thread;

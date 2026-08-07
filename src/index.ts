@@ -1,7 +1,12 @@
 import { Client, Collection, GatewayIntentBits, Partials } from 'discord.js';
 import { config } from './config';
 import { handleReady } from './events/ready';
-import { handleMessageReactionAdd, handleMessageReactionRemove } from './events/messageReaction';
+import {
+  handleMessageReactionAdd,
+  handleMessageReactionRemove,
+  handleReactionsCleared,
+  reconcileVotes,
+} from './events/messageReaction';
 import { handleMessageCreate } from './events/messageCreate';
 import { handleInteractionCreate } from './events/interactionCreate';
 import { endVotingCommand } from './commands/endvoting';
@@ -41,11 +46,23 @@ commands.set(standupEndCommand.data.name, standupEndCommand);
 client.once('clientReady', () => {
   handleReady(client);
   startStandupScheduler(client);
+  reconcileVotes(client).catch((e) => console.error('[reconcile] failed:', e));
 });
 
 client.on('messageReactionAdd', handleMessageReactionAdd);
 
 client.on('messageReactionRemove', handleMessageReactionRemove);
+
+client.on('messageReactionRemoveAll', (message) =>
+  handleReactionsCleared(message).catch((e) => console.error('[reaction] clear-all failed:', e)),
+);
+
+client.on('messageReactionRemoveEmoji', (reaction) => {
+  if (reaction.emoji.name !== config.voteEmoji) return;
+  handleReactionsCleared(reaction.message).catch((e) =>
+    console.error('[reaction] clear-emoji failed:', e),
+  );
+});
 
 client.on('messageCreate', handleMessageCreate);
 
@@ -53,12 +70,9 @@ client.on('interactionCreate', (interaction) =>
   handleInteractionCreate(interaction, commands),
 );
 
-// Raw gateway debug — remove once reactions are confirmed working
-client.on('raw', (packet: any) => {
-  if (packet.t === 'MESSAGE_REACTION_ADD') {
-    console.log('[RAW REACTION]', JSON.stringify(packet.d));
-  }
-});
+client.on('error', (e) => console.error('[client]', e));
+
+process.on('unhandledRejection', (e) => console.error('[unhandledRejection]', e));
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 

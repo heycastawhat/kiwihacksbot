@@ -96,9 +96,9 @@ export async function createSubmission(
   return records[0].id;
 }
 
-export async function closeAllActiveSubmissions(month: number, year: number): Promise<void> {
+export async function closeAllActiveSubmissions(): Promise<void> {
   const records = await base('submissions').select({
-    filterByFormula: `AND({month} = ${month}, {year} = ${year}, {status} = 'active')`
+    filterByFormula: `{status} = 'active'`
   }).all();
 
   for (const r of records) {
@@ -113,9 +113,11 @@ export async function closeAllActiveSubmissions(month: number, year: number): Pr
   }
 }
 
-export async function getActiveSubmissions(month: number, year: number): Promise<Submission[]> {
+// Votes accrue continuously, so a submission stays in scope until an /endvoting closes it —
+// filtering by calendar month would drop votes cast after the month it was shipped in.
+export async function getActiveSubmissions(): Promise<Submission[]> {
   const records = await base('submissions').select({
-    filterByFormula: `AND({month} = ${month}, {year} = ${year}, {status} = 'active')`
+    filterByFormula: `{status} = 'active'`
   }).all();
 
   return records.map(r => ({
@@ -134,11 +136,9 @@ export async function getActiveSubmissions(month: number, year: number): Promise
 }
 
 export async function getTopSubmissions(
-  month: number,
-  year: number,
   limit = 10,
 ): Promise<(Submission & { vote_count: number })[]> {
-  const submissions = await getActiveSubmissions(month, year);
+  const submissions = await getActiveSubmissions();
   const result = [];
   
   for (const sub of submissions) {
@@ -156,6 +156,13 @@ export async function getVoteCount(submissionId: string): Promise<number> {
     filterByFormula: `{submission_id} = '${submissionId}'`
   }).all();
   return records.length;
+}
+
+export async function getVoters(submissionId: string): Promise<string[]> {
+  const records = await base('votes').select({
+    filterByFormula: `{submission_id} = '${submissionId}'`
+  }).all();
+  return records.map(r => r.get('voter_id') as string);
 }
 
 export async function hasVoted(voterId: string, submissionId: string): Promise<boolean> {

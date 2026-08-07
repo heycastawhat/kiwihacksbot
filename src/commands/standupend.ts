@@ -2,6 +2,7 @@ import {
   ChatInputCommandInteraction,
   SlashCommandBuilder,
   PermissionFlagsBits,
+  MessageFlags,
 } from 'discord.js';
 import { getStandupDay, endStandupDay } from '../db';
 import { todayInTz } from '../standup/scheduler';
@@ -13,7 +14,7 @@ export const standupEndCommand = {
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     if (!interaction.memberPermissions?.has('Administrator')) {
       await interaction.editReply('Error: Administrator permission required.');

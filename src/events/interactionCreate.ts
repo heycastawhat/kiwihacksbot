@@ -2,12 +2,10 @@ import {
   Interaction,
   Collection,
   ButtonInteraction,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
   TextChannel,
+  MessageFlags,
 } from 'discord.js';
-import { hasVoted, addVote, removeVote, getVoteCount, getActiveVotingSession, getSubmissionByMessageId, createSubmission } from '../db';
+import { getSubmissionByMessageId, createSubmission } from '../db';
 import { config } from '../config';
 import { missingRequirements, displayNameOf } from '../submissionRules';
 
@@ -24,7 +22,7 @@ export async function handleInteractionCreate(
       await command.execute(interaction);
     } catch (err) {
       console.error(`[command:${interaction.commandName}]`, err);
-      const payload = { content: 'Error: Something went wrong. Please try again.', ephemeral: true };
+      const payload = { content: 'Error: Something went wrong. Please try again.', flags: MessageFlags.Ephemeral } as const;
       if (interaction.replied || interaction.deferred) {
         await interaction.followUp(payload);
       } else {
@@ -34,56 +32,10 @@ export async function handleInteractionCreate(
     return;
   }
 
-  // ── Vote buttons ─────────────────────────────────────────────────────────
-  if (interaction.isButton()) {
-    await handleVoteButton(interaction);
-  }
-}
-
-async function handleVoteButton(interaction: ButtonInteraction): Promise<void> {
-  if (interaction.customId.startsWith('shipconfirm_yes_') || interaction.customId.startsWith('shipconfirm_no_')) {
+  // ── Ship confirmation buttons ────────────────────────────────────────────
+  if (interaction.isButton() && interaction.customId.startsWith('shipconfirm_')) {
     await handleShipConfirm(interaction);
-    return;
   }
-
-  if (!interaction.customId.startsWith('vote_')) return;
-
-  const submissionId = interaction.customId.slice('vote_'.length);
-  if (!submissionId) return;
-
-  await interaction.deferUpdate();
-
-  // Reject votes outside an active session
-  const session = await getActiveVotingSession();
-  if (!session) {
-    await interaction.followUp({
-      content: 'Error: Voting is not currently open.',
-      ephemeral: true,
-    });
-    return;
-  }
-
-  const userId = interaction.user.id;
-  const alreadyVoted = await hasVoted(userId, submissionId);
-
-  if (alreadyVoted) {
-    await removeVote(userId, submissionId);
-  } else {
-    await addVote(userId, submissionId);
-  }
-
-  const nowVoted = !alreadyVoted;
-
-  // Update the button label + style to reflect the new state
-  const newButton = new ButtonBuilder()
-    .setCustomId(`vote_${submissionId}`)
-    .setLabel(nowVoted ? 'Voted' : 'Vote')
-    .setStyle(nowVoted ? ButtonStyle.Success : ButtonStyle.Primary);
-
-  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(newButton);
-
-  // Update the message in place — no separate reply needed
-  await interaction.editReply({ components: [row] });
 }
 
 async function handleShipConfirm(interaction: ButtonInteraction): Promise<void> {
@@ -102,7 +54,7 @@ async function handleShipConfirm(interaction: ButtonInteraction): Promise<void> 
   }
 
   if (interaction.user.id !== original.author.id) {
-    await interaction.followUp({ content: 'Only the original poster can confirm this.', ephemeral: true });
+    await interaction.followUp({ content: 'Only the original poster can confirm this.', flags: MessageFlags.Ephemeral });
     return;
   }
 
@@ -116,7 +68,7 @@ async function handleShipConfirm(interaction: ButtonInteraction): Promise<void> 
   if (missing.length > 0) {
     await interaction.followUp({
       content: `Your post needs ${missing.join(' and ')} before it can be entered. Add it to the post, then hit Yes again.`,
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
     return;
   }

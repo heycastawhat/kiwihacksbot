@@ -29,7 +29,8 @@ async function run() {
     { name: 'date', type: 'singleLineText' }, // YYYY-MM-DD, local to config.standupTimezone
     { name: 'channel_id', type: 'singleLineText' },
     { name: 'thread_id', type: 'singleLineText' },
-    { name: 'posted_at', type: 'singleLineText' }
+    { name: 'posted_at', type: 'singleLineText' },
+    { name: 'ended_at', type: 'singleLineText' }
   ]);
 
   await createTable('standup_responses', [

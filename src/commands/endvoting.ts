@@ -7,6 +7,7 @@ import {
   ButtonStyle,
   TextChannel,
   PermissionFlagsBits,
+  MessageFlags,
 } from 'discord.js';
 import { config } from '../config';
 import {
@@ -29,7 +30,7 @@ export const endVotingCommand = {
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     // Ops guild only
     if (interaction.guildId !== config.opsGuildId) {
@@ -50,7 +51,7 @@ export const endVotingCommand = {
     const month = now.getMonth() + 1;
     const year = now.getFullYear();
 
-    const top = await getTopSubmissions(month, year, 10);
+    const top = await getTopSubmissions(10);
     if (top.length === 0) {
       await interaction.editReply('Error: No submissions found for this session.');
       return;
@@ -118,7 +119,7 @@ export const endVotingCommand = {
       await opsChannel.send({ embeds: [embed] });
     }
 
-    await closeAllActiveSubmissions(month, year);
+    await closeAllActiveSubmissions();
 
     await interaction.editReply(
       `Success: Voting closed. Top ${count} results posted to the ops server.`,
